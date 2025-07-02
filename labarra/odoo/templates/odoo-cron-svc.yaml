@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "labarra-odoo.fullname" . }}-cron
+  labels:
+    {{- include "labarra-odoo.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.portNginx }}
+      targetPort: {{ .Values.service.portNginx }}
+      protocol: TCP
+      name: http
+      {{- if (eq .Values.service.type "NodePort") }}
+      nodePort: {{ .Values.service.nodePort }}  
+      {{- end }}
+    - port: {{ .Values.service.portOdoo }}
+      targetPort: {{ .Values.service.portOdoo }}
+      protocol: TCP
+      name: odoo      
+  selector:
+    {{- include "labarra-odoo-cron.selectorLabels" . | nindent 4 }}

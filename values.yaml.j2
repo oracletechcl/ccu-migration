@@ -1,0 +1,318 @@
+# Default values for labarra-odoo.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: {{ odoo.replicaCount }}
+
+image:
+  repository: registry.kub.cloudccu.cl/equipo-b2c/labarra
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: latest
+
+imagePullSecrets: ''
+nameOverride: ''
+fullnameOverride: ''
+
+selectorLabels:
+  - app: labarra-odoo
+
+persistence:
+  enabled: true
+  claimName: labarra-odoo-data
+  storageClass: local-path-retain
+  accessMode: ReadWriteOnce
+  size: 60Gi
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: 'labarra'
+
+podAnnotations: 
+  backup.velero.io/backup-volumes: labarra-odoo-data
+
+podSecurityContext:
+  {}
+  # fsGroup: 2000
+
+securityContext:
+  {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  portNginx: 80 
+  portOdoo: 8069 
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-http
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: '30'
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '1800'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '1800'
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_clear_headers "Cache-Control";        
+      more_set_headers "Cache-Control: public";
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location ~* /shop {
+        deny all;
+        return 403;
+      }
+      location ~* /my {
+        deny all;
+        return 403;
+      }			
+      location ~* /slides {
+        deny all;
+        return 403;
+      }			
+      location ~* /web/database {
+        deny all;
+        return 403;
+      }      
+  hosts:
+    - host: {{ ingress.host }}
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: kub-ccu-tls
+      hosts:
+        - {{ ingress.host }}           
+
+ingressAdmin:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-http 
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: '30'
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '1800'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '1800'
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_clear_headers "Cache-Control";        
+      more_set_headers "Cache-Control: public";
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location ~* /shop {
+        deny all;
+        return 403;
+      }
+      location ~* /my {
+        deny all;
+        return 403;
+      }			
+      location ~* /slides {
+        deny all;
+        return 403;
+      }			
+      location ~* /web/database {
+        deny all;
+        return 403;
+      }              
+  hosts:
+    - host: {{ ingress.adminHost }}
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: kub-ccu-tls
+      hosts:
+        - {{ ingress.adminHost }}                  
+
+resources:
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  limits:
+  #   cpu: 1000m
+    memory: 16Gi
+  requests:
+    cpu: 800m
+    memory: 1Gi
+
+resourcesOdooCron:
+  limits:
+    memory: 65Gi
+  requests:
+    cpu: 1000m
+    memory: 4Gi    
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+{%- if env == 'PROD' %}
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - pk8s-lfr12       
+{% else %}
+
+affinity: {}
+
+{%- endif %}   
+
+odoo:
+  startArguments: |
+    ['--config', '/etc/odoo/odoo.conf'] 
+  readinessProbe:
+    enabled: false
+    initialDelaySeconds: 240
+    timeoutSeconds: 10
+    periodSeconds: 15
+    failureThreshold: 10
+    successThreshold: 1
+  livenessProbe:
+    enabled: false
+    initialDelaySeconds: 240
+    timeoutSeconds: 20
+    periodSeconds: 10
+    failureThreshold: 6
+    successThreshold: 1
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    timeoutSeconds: 60
+    periodSeconds: 10
+    failureThreshold: 20
+    successThreshold: 1  
+
+odooCron:
+  startArguments: |
+    ['--config', '/etc/odoo/odoo-cron.conf']  
+  readinessProbe:
+    enabled: false
+    initialDelaySeconds: 240
+    timeoutSeconds: 10
+    periodSeconds: 15
+    failureThreshold: 10
+    successThreshold: 1
+  livenessProbe:
+    enabled: false
+    initialDelaySeconds: 240
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+    successThreshold: 1
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    timeoutSeconds: 60
+    periodSeconds: 10
+    failureThreshold: 20
+    successThreshold: 1
+
+odooAdmin:
+  replicaCount: {{ odooAdmin.replicaCount }}
+  startArguments: |
+    ['--config', '/etc/odoo/odoo-admin.conf']  
+  readinessProbe:
+    enabled: false
+    initialDelaySeconds: 240
+    timeoutSeconds: 10
+    periodSeconds: 15
+    failureThreshold: 10
+    successThreshold: 1
+  livenessProbe:
+    enabled: false
+    initialDelaySeconds: 240
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+    successThreshold: 1
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    timeoutSeconds: 60
+    periodSeconds: 10
+    failureThreshold: 20
+    successThreshold: 1      
+
+nginx:
+  readinessProbe:
+    enabled: false
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+  livenessProbe:
+    enabled: false
+    initialDelaySeconds: 30
+    timeoutSeconds: 5
+    periodSeconds: 10
+    failureThreshold: 6
+    successThreshold: 1
+  conf: |-
+    #odoo server
+    upstream odoo {
+      server localhost:8069;
+    }
+
+    upstream odoochat {
+      server localhost:8072;
+    }       
+
+    server {
+      listen 80;
+      proxy_read_timeout 720s;
+      proxy_connect_timeout 720s;
+      proxy_send_timeout 720s;
+      client_max_body_size 50M; 
+      large_client_header_buffers 16 5120k;
+
+      # Add Headers for odoo proxy mode
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-Host $http_host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+      # Redirect requests to odoo backend server
+      location / {
+        proxy_redirect off;
+        proxy_pass http://odoo;
+      }
+
+      # Redirect longpoll requests to odoo longpolling port
+      location /longpolling {
+        proxy_pass http://odoochat;
+      }
+
+      location ~* /web/static/ {
+        proxy_cache_valid 200 90m;
+        proxy_buffering    on;
+        expires 864000;
+        proxy_pass http://odoo;
+      }            
+
+      # common gzip
+      gzip_types text/css text/scss text/plain text/xml application/xml application/json application/javascript;
+      gzip on;
+    }
+

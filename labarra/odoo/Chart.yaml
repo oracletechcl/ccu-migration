@@ -1,0 +1,7 @@
+apiVersion: v2
+name: labarra-odoo
+version: 1.0.0
+description: A Helm chart for Kubernetes
+icon: https://bitnami.com/assets/stacks/odoo/img/odoo-stack-220x234.png
+type: application
+appVersion: '1.16.0'

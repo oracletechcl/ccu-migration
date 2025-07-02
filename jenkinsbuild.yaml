@@ -1,0 +1,37 @@
+SHA=$(git rev-parse HEAD)
+
+j2 config/odoo.conf.j2 env_PROD_ONPREM.json  > config/odoo.conf
+j2 config/odoo-cron.conf.j2 env_PROD_ONPREM.json  > config/odoo-cron.conf
+j2 config/odoo-admin.conf.j2 env_PROD_ONPREM.json  > config/odoo-admin.conf
+j2 Dockerfile.j2 env_PROD_ONPREM.json > Dockerfile
+j2 values.yaml.j2 env_PROD_ONPREM.json > values.yaml
+
+# Build Image & Push
+# docker login registry.kub.cloudccu.cl -u jose.rivas -p $DOCKER_REGISTRY_CLOUD_PASS
+docker login registry.ccu.cl -u jose.rivas -p $DOCKER_REGISTRY_CLOUD_PASS
+docker build -t registry.ccu.cl/labarra-odoo/prod:$SHA .
+docker push registry.ccu.cl/labarra-odoo/prod:$SHA
+
+# Deleting ConfigMap
+kubectl delete configmap odoo-cm-file --namespace=$namespace || echo "odoo-cm-file not found"
+kubectl delete configmap odoo-cron-cm-file --namespace=$namespace || echo "odoo-cron-cm-file not found"
+kubectl delete configmap odoo-admin-cm-file --namespace=$namespace || echo "odoo-admin-cm-file not found"
+
+# Creating ConfigMap
+kubectl create configmap odoo-cm-file --namespace=$namespace --from-file=config/odoo.conf
+kubectl create configmap odoo-cron-cm-file --namespace=$namespace --from-file=config/odoo-cron.conf
+kubectl create configmap odoo-admin-cm-file --namespace=$namespace --from-file=config/odoo-admin.conf
+
+# Deploy Odoo Standard & Odoo Cron
+helm upgrade --install labarra-odoo ./labarra/odoo/ \
+	--set image.repository=registry.ccu.cl/labarra-odoo/prod \
+    --set image.tag=$SHA \
+    --values values.yaml \
+    --create-namespace --namespace $namespace
+
+# Deploy Odoo Admin
+helm upgrade --install labarra-odoo-admin ./labarra/odoo-admin/ \
+	--set image.repository=registry.ccu.cl/labarra-odoo/prod \
+    --set image.tag=$SHA \
+    --values values.yaml \
+    --create-namespace --namespace $namespace

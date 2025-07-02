@@ -1,0 +1,27 @@
+[options]
+admin_passwd = {{ odoo.admin_password }}
+addons_path = {{ odoo.addons_path }}  
+{%- if env == 'QA' or env == 'PROD' or env == 'STAGING' %}    
+db_host = {{ database.POSTGRES_HOST }}
+{%- endif %}
+db_port = {{ database.POSTGRES_DB_PORT }} 
+db_user = {{ database.POSTGRES_USER }}
+db_password = {{ database.POSTGRES_PASSWORD }}
+db_maxconn = {{ odooAdmin.db_maxconn }}
+proxy_mode = {{odoo.proxy_mode}}
+log_level = {{odoo.log_level}}
+#logfile = {{ odoo.logs_path }}
+max_cron_threads = {{ odooAdmin.max_cron_threads }}
+server_wide_modules = web
+xmlrpc_interface = 0.0.0.0
+data_dir = {{odoo.data_dir}}
+#dbfilter = ^{{database.POSTGRES_DB}}$
+
+{%- if not debug %}
+workers={{ odoo.worker }}
+{%- endif %}  
+limit_time_cpu = {{ odooAdmin.limit_time_cpu }}
+limit_time_real = {{ odooAdmin.limit_time_real }}
+limit_memory_hard = {{ odooAdmin.limit_memory_hard }}
+limit_memory_soft = {{ odooAdmin.limit_memory_soft }}
+limit_time_real_cron = {{ odooAdmin.limit_time_real_cron }}

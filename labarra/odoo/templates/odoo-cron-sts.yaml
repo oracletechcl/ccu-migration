@@ -1,0 +1,167 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "labarra-odoo.fullname" . }}-cron
+  labels:
+    {{- include "labarra-odoo.labels" . | nindent 4 }}-cron
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: 1
+  {{- end }}
+  serviceName: {{ .Chart.Name }}
+ # strategy:
+ #   type: Recreate
+  selector:
+    matchLabels:
+      {{- include "labarra-odoo-cron.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "labarra-odoo-cron.selectorLabels" . | nindent 8 }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "labarra-odoo.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ['odoo']
+          args: {{ .Values.odooCron.startArguments }}      
+          ports:
+            - name: http
+              containerPort: 8069
+              protocol: TCP
+            - name: http-longpoll
+              containerPort: 8072
+              protocol: TCP                      
+          {{- if .Values.odooCron.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /web/login
+              port: http
+            initialDelaySeconds: {{ .Values.odooCron.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odooCron.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odooCron.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.odooCron.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.odooCron.readinessProbe.failureThreshold }}
+          {{- end }}                              
+          {{- if .Values.odooCron.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /web/login
+              port: http
+            initialDelaySeconds: {{ .Values.odooCron.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odooCron.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odooCron.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.odooCron.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.odooCron.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.odooCron.startupProbe.enabled }}
+          startupProbe:
+            exec:
+              command: 
+                - sh
+                - "-c"
+                - |
+                  /bin/bash <<'EOF'
+
+                  set -e
+                  set -o pipefail
+
+                  echo "starting probe"
+                  
+                  cat /dev/null > http_debug.txt && k6 run --vus 27 /startup-probe.js --iterations 27 --http-debug=full >> http_debug.txt 2>> http_debug.txt
+
+                  EOF
+            initialDelaySeconds: {{ .Values.odooCron.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odooCron.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odooCron.startupProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.odooCron.startupProbe.successThreshold }}
+            failureThreshold: {{ .Values.odooCron.startupProbe.failureThreshold }}
+          {{- end }} 
+          resources:
+            {{- toYaml .Values.resourcesOdooCron | nindent 12 }}
+          volumeMounts:
+            - name: labarra-odoo-data
+              mountPath: /var/lib/odoo/share/
+            - name: odoo-config
+              mountPath: /etc/odoo/odoo-cron.conf
+              subPath: odoo-cron.conf               
+            {{- if .Values.extraVolumeMounts }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.extraVolumeMounts "context" $) | nindent 12 }}
+            {{- end }}      
+        - name: {{ .Chart.Name }}-nginx
+          image: nginx:latest 
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          {{- if .Values.nginx.readinessProbe.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.nginx.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.nginx.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.nginx.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.nginx.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.nginx.readinessProbe.failureThreshold }}
+          {{- end }}               
+          {{- if .Values.nginx.livenessProbe.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.nginx.livenessProbe.initialDelaySeconds }}  
+            periodSeconds: {{ .Values.nginx.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.nginx.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.nginx.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.nginx.livenessProbe.failureThreshold }}
+          {{- end }}                                                      
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: labarra-odoo-data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.claimName }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: nginx-config
+          configMap:
+            name: nginx-configmap-file          
+        - name: odoo-config
+          configMap:
+            name: odoo-cron-cm-file  
+            
+        {{- if .Values.extraVolumes }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.extraVolumes "context" $) | nindent 8 }}
+        {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
