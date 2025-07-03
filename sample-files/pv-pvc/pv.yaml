@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+ name: fss-benchmark-pv
+spec:
+ storageClassName: oci-fss
+ capacity:
+  storage: 50Gi
+ accessModes:
+  - ReadWriteMany
+ mountOptions:
+  - nosuid
+  - nconnect=16
+ nfs:
+    server: MOUNT_TARGET_IP
+    path: "/EXPORTED/PATH/FSS"
+    readOnly: false

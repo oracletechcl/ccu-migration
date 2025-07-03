@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fss-benchmark-pvc
+  namespace: generic-benchmark-fss
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  volumeName: fss-benchmark-pv
+  storageClassName: oci-fss

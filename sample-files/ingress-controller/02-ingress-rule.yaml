@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress-rule
+  namespace: REPLACE_WITH_NAMESPACE
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - FQDN.DOMAIN.REPLACE-WITH
+      secretName: REPLACE_WITH_SECRET_CONTAINING_CERTIFICATE
+  rules:
+    - host: FQDN.DOMAIN.REPLACE-WITH
+      http:
+        paths:
+          - path: /URI(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: APP-SERVICE-NAME
+                port:
+                  number: 80
